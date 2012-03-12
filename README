@@ -1,0 +1,20 @@
+This project is to create a tool for detecting code smells in scala. This is a code-quality tool for scala. The project in its bare-bones provides a framework to create a full-fledged smell detection tool for scala.
+
+It is still in the initial stages and works on simple scala code (code that does not use sbt). It currently works on itself and on the sample code in Example.scala.
+
+Currently the following smells are implemented
+Explicit-Return :  using the word "return" to return from a method is considered a smell
+Using-Null : any use of null is a smell
+Redundant-returnType: specifying the return-type of the method when the return-type can be inferred is considered a smell
+
+Many other smells can be added in a similar way.
+
+To compile use 
+ant compile
+
+To run use
+ant run-on-scout
+ant run-example
+
+For code-coverage report
+ant undercover-report

@@ -1,0 +1,225 @@
+<project name="Scout" default="clean-build-all" basedir=".">
+    <property name="app.name" value="scout"/>
+    <property environment="environment"/>
+	
+	<property name="lib.dir" value="${basedir}/lib"/>
+	<property name="output.dir" value="${basedir}/target"/>
+	<property name="source.dir" value="${basedir}/src/"/>
+	<property name="test.dir" value="${basedir}/test/"/>
+	<property name="classes.dir" value="${output.dir}/classes"/>
+    <property name="testclasses.dir" value="${output.dir}/testclasses"/>
+	<property name="cobertura.dir" value="${output.dir}/cobertura"/>
+	<property environment="environment"/>
+    <property name="CCARTIFACTSDIR" value="${environment.CC_BUILD_ARTIFACTS}"/>
+	<property name="instrumented.dir" value="${CCARTIFACTSDIR}/instrumented"/>
+    <property name="coveragereport.dir" value="${CCARTIFACTSDIR}/coveragereports"/>
+	
+	<property name="undercover.dir" value="${output.dir}/undercover"/>
+
+    <property name="failOnSmell" value="false"/>
+
+	<mkdir dir="${CCARTIFACTSDIR}"/>
+    <mkdir dir="${coveragereport.dir}"/>
+
+	<path id="undercover.classpath">
+		<path refid="scala.classpath"/>
+		<pathelement location="${lib.dir}/commons-lang-2.4.jar"/>
+		<pathelement location="${lib.dir}/undercover-0.8.2.jar"/>
+		<pathelement location="${lib.dir}/asm-all-3.2.jar"/>
+	</path>
+
+	<path id="scala.classpath">
+		<pathelement location="${lib.dir}/scala-compiler.jar"/> 
+		<pathelement location="${lib.dir}/scala-library.jar"/> 
+	</path>
+
+	<path id="manifest.classpath">
+		<path refid="scala.classpath"/>
+	</path>
+
+	<path id="scalatest.classpath">
+		<path refid="scala.classpath"/>
+		<pathelement location="${lib.dir}/scalatest-1.2.jar"/>
+		<pathelement location="${lib.dir}/mockito-all-1.8.5.jar"/>
+		<pathelement location="${lib.dir}/specs_2.8.0-1.6.6-SNAPSHOT.jar"/>
+	</path>
+
+	<path id="cobertura.classpath">
+		<pathelement location="${lib.dir}/cobertura/asm-3.0.jar"/>
+		<pathelement location="${lib.dir}/cobertura/asm-tree-3.0.jar"/>
+		<pathelement location="${lib.dir}/cobertura/cobertura.jar"/>
+		<pathelement location="${lib.dir}/cobertura/jakarta-oro-2.0.8.jar"/>
+		<pathelement location="${lib.dir}/cobertura/log4j-1.2.9.jar"/>
+	</path>
+
+	<taskdef resource="scala/tools/ant/antlib.xml">
+		 <classpath refid="scala.classpath"/>
+	</taskdef>
+
+	<target name="clean-build-all" depends="clean, codeCoverageReport, run-example, run-on-scout"/>
+
+	
+	<target name="compile">
+        <mkdir dir="${classes.dir}"/>
+        <scalac srcdir="${source.dir}" destdir="${classes.dir}" classpathref="scala.classpath">
+            <include name="**/*.scala"/>
+        </scalac>
+    </target>
+
+	<target name="compile-test" depends="compile">
+		<mkdir dir="${testclasses.dir}"/>
+		<scalac srcdir="${test.dir}" destdir="${testclasses.dir}" >
+			<classpath>
+				<path refid="scalatest.classpath"/>
+				<pathelement location="${classes.dir}"/>
+			</classpath>
+			<include name="**/*.scala"/>
+		</scalac>
+	</target>
+
+	<target name="compile-reporter" depends="">
+		<scalac srcdir="${lib.dir}/scalatestHelper" destdir="${lib.dir}/scalatestHelper" >
+			<classpath>
+				<path refid="scalatest.classpath"/>
+			</classpath>
+			<include name="**/*.scala"/>
+		</scalac>
+	</target>
+	
+	<target name="test" depends="compile-test, compile-reporter">  
+		 <scalatest haltonfailure="true" fork="false">
+			<runpath>
+				<pathelement location="${classes.dir}"/>
+				<pathelement location="${testclasses.dir}"/>
+			</runpath>
+			<reporter type="reporterclass" classname="JunitLikeReporter" />  
+		</scalatest> 
+	</target>
+	
+	<taskdef name="scalatest" classname="org.scalatest.tools.ScalaTestAntTask">  
+			<classpath refid="scalatest.classpath"/>
+			<classpath location="${lib.dir}/scalatestHelper"/>
+	</taskdef>
+
+	<taskdef resource="undercover-ant.properties" classpathref="undercover.classpath" />
+
+	<target name="test-suite" depends="compile-test, compile-reporter">  
+		<scalatest haltonfailure="true" fork="false">
+			<runpath>
+				<path refid="scala.classpath"/>
+				<pathelement location="${classes.dir}"/>
+				<pathelement location="${testclasses.dir}"/>
+			</runpath>
+			<reporter type="reporterclass" classname="JunitLikeReporter" />  
+			<suite className="${suite}"/>
+		</scalatest>  
+	</target>
+
+    <target name="clean">
+        <delete dir="${output.dir}"/>
+		<delete dir="${basedir}/tmpClasses"/>
+		<delete file="${basedir}/scout.jar"/>
+    </target>
+
+	<target name="jar" depends="compile">
+		<manifestclasspath property="lib.list" jarfile="${basedir}/scout.jar">
+			<classpath refid="manifest.classpath"/>
+		</manifestclasspath>
+		<jar jarfile="${basedir}/scout.jar" basedir="${classes.dir}">
+			<manifest>
+				<attribute name="Main-Class" value="Start"/>
+				<attribute name="Class-Path" value="${lib.list}"/>
+			</manifest>
+		</jar>
+    </target>
+
+    <target name="run-example" depends="jar">
+        <java jar="${basedir}/scout.jar" fork="true" output="${CCARTIFACTSDIR}/Example.txt" failonerror="${failOnSmell}">
+			<arg value="-f"/>
+			<arg value="Example.scala"/>
+		</java>
+    </target>
+
+	 <target name="run-on-scout" depends="jar">
+        <java jar="${basedir}/scout.jar" fork="true" output="${CCARTIFACTSDIR}/Scout.txt" failonerror="${failOnSmell}">
+			<arg value="-r"/>
+			<arg value="./src"/>
+		</java>
+    </target>
+
+	<target name="instrumentClasses" depends="clean, compile-test">
+		<delete file="cobertura.ser"/>
+		<taskdef classpathref="cobertura.classpath" resource="tasks.properties"/>
+		<cobertura-instrument todir="${instrumented.dir}">
+			 <ignore regex="org.apache.log4j.*"/>
+            <fileset dir="${classes.dir}"/>
+        </cobertura-instrument>
+	</target>
+
+	
+	<target name="runInstrumentedTests" depends="instrumentClasses, compile-reporter">
+		<scalatest haltonfailure="true" fork="true" maxmemory="1280M">
+			<runpath>
+				<pathelement location="${instrumented.dir}"/>
+				<path refid="scalatest.classpath"/>
+				<path refid="cobertura.classpath"/>
+				<path location="${classes.dir}"/>
+				<pathelement location="${testclasses.dir}" />
+			</runpath>
+			<jvmarg value="-XX:MaxPermSize=128m"/>
+			<reporter type="file" filename="${CCARTIFACTSDIR}/testresult.txt"/>
+			<reporter type="reporterclass" classname="JunitLikeReporter" />  
+		</scalatest>
+		<fail message="test failed" if="test.instrumented.failure"/>
+   </target>
+        
+	<target name="codeCoverageReport" depends="runInstrumentedTests">
+        <cobertura-report format="html" destdir="${coveragereport.dir}">
+            <fileset dir="${source.dir}"/>
+            <fileset dir="${test.dir}"/>
+        </cobertura-report>
+
+        <delete dir="${instrumented.dir}"/>
+		<delete file="cobertura.ser"/>
+    </target>
+
+	<target name="undercover-instrumentClasses" depends="compile-test">
+		<undercover-instrument destdir="${undercover.dir}/inst-classes" metadatafile="${undercover.dir}/undercover.md" coveragedatafile="${undercover.dir}/undercover.cd">
+			<instrumentpath>
+				<pathelement location="${classes.dir}" />
+			</instrumentpath>
+		</undercover-instrument>
+
+		<undercover-instrument destdir="${undercover.dir}/test-inst-classes" metadatafile="${undercover.dir}/undercover.md" coveragedatafile="${undercover.dir}/undercover.cd">
+			<instrumentpath>
+				<pathelement location="${testclasses.dir}" />
+			</instrumentpath>
+		</undercover-instrument>
+	</target>
+ 
+	<target name="undercover-runInstrumentedTests" depends="undercover-instrumentClasses">
+		<scalatest haltonfailure="true" fork="true" maxmemory="1280M">
+			<runpath>
+				<pathelement location="${undercover.dir}/inst-classes/classes"/>
+				<pathelement location="${undercover.dir}/test-inst-classes/classes"/>
+				<path refid="scalatest.classpath"/>
+				<path refid="undercover.classpath"/>
+			</runpath>
+			<jvmarg value="-XX:MaxPermSize=128m"/>
+			<config name="undercover.coveragedata.saveOnExit" value="true"/>
+			<config name="undercover.coveragedata.file" value="${undercover.dir}/undercover.cd"/>
+		</scalatest>
+	</target>
+
+	<target name="undercover-report" depends="undercover-runInstrumentedTests">
+			<undercover-report metadatafile="${undercover.dir}/undercover.md"
+							sourceencoding="UTF-8">
+				 <sourcepath>
+					  <pathelement location="${source.dir}" />
+					  <pathelement location="${test.dir}" />
+				</sourcepath>
+				<html output="${undercover.dir}" />
+			</undercover-report>
+			<!--delete dir="${undercover.dir}/instrumented"/-->
+	</target>
+</project>
